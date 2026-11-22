@@ -1,0 +1,935 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Hardened Global Helpers
+    // -------------------------------------------------------------------------
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidAccountNumber(num) {
+      return num is string && num.size() >= 4 && num.size() <= 24 && num.matches('^[A-Z0-9\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isValidCurrency(curr) {
+      return curr in ['USD', 'KES', 'NGN', 'GHS', 'EUR', 'GBP'];
+    }
+
+    function isAccountCustomer(data) {
+      return isVerifiedUser() && (
+        ('clientUid' in data && data.clientUid == request.auth.uid) ||
+        (
+          'customerEmail' in data &&
+          data.customerEmail is string &&
+          data.customerEmail.size() > 0 &&
+          request.auth.token.email is string &&
+          data.customerEmail == request.auth.token.email.lower()
+        )
+      );
+    }
+
+    function isApprovedAccountClient(data) {
+      return isAccountCustomer(data)
+        && 'clientAccessApproved' in data
+        && data.clientAccessApproved == true;
+    }
+
+    // -------------------------------------------------------------------------
+    // Validation Blueprints (Anti-Update-Gap)
+    // -------------------------------------------------------------------------
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+          'uid', 'displayName', 'email', 'branchName', 'defaultCurrency', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'displayName', 'email', 'branchName', 'defaultCurrency', 'alertThresholdCents', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 120
+        && data.branchName is string && data.branchName.size() >= 1 && data.branchName.size() <= 100
+        && isValidCurrency(data.defaultCurrency)
+        && (!('alertThresholdCents' in data) || (data.alertThresholdCents is int && data.alertThresholdCents >= 0))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCustomer(data) {
+      return data.keys().hasAll([
+          'ownerId', 'fullName', 'phone', 'email', 'nationalId',
+          'occupation', 'address', 'kycStatus', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'clientUid', 'customerEmail', 'fullName', 'phone', 'email', 'nationalId',
+          'occupation', 'address', 'kycStatus', 'profilePhotoDataUrl', 'idCardPhotoDataUrl', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && data.ownerId == request.auth.uid
+        && (!('clientUid' in data) || isValidId(data.clientUid))
+        && (!('customerEmail' in data) || (data.customerEmail is string && data.customerEmail.size() <= 120))
+        && data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 100
+        && data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 30
+        && data.email is string && data.email.size() <= 120
+        && data.nationalId is string && data.nationalId.size() >= 3 && data.nationalId.size() <= 40
+        && data.occupation is string && data.occupation.size() >= 2 && data.occupation.size() <= 80
+        && data.address is string && data.address.size() <= 200
+        && data.kycStatus in ['verified', 'pending']
+        && (!('profilePhotoDataUrl' in data) || (
+          data.profilePhotoDataUrl is string
+          && data.profilePhotoDataUrl.size() > 0
+          && data.profilePhotoDataUrl.size() <= 220000
+          && data.profilePhotoDataUrl.matches('^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$')
+        ))
+        && (!('idCardPhotoDataUrl' in data) || (
+          data.idCardPhotoDataUrl is string
+          && data.idCardPhotoDataUrl.size() > 0
+          && data.idCardPhotoDataUrl.size() <= 380000
+          && data.idCardPhotoDataUrl.matches('^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$')
+        ))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAccount(data) {
+      return data.keys().hasAll([
+          'ownerId', 'customerId', 'customerName', 'accountNumber', 'accountType',
+          'currency', 'balanceCents', 'totalDepositsCents', 'totalWithdrawalsCents',
+          'transactionCount', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'clientUid', 'clientAccessApproved', 'customerEmail', 'customerId', 'customerName', 'accountNumber', 'accountType',
+          'currency', 'balanceCents', 'totalDepositsCents', 'totalWithdrawalsCents',
+          'transactionCount', 'status', 'lastTransferTxId', 'lastDeletedTxId', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && isValidId(data.customerId)
+        && (!('clientUid' in data) || isValidId(data.clientUid))
+        && (!('clientAccessApproved' in data) || data.clientAccessApproved is bool)
+        && (!('customerEmail' in data) || (data.customerEmail is string && data.customerEmail.size() <= 120))
+        && (!('lastTransferTxId' in data) || isValidId(data.lastTransferTxId))
+        && (!('lastDeletedTxId' in data) || isValidId(data.lastDeletedTxId))
+        && data.customerName is string && data.customerName.size() >= 2 && data.customerName.size() <= 100
+        && isValidAccountNumber(data.accountNumber)
+        && data.accountType in ['savings', 'business', 'group_solidarity', 'fixed_deposit']
+        && isValidCurrency(data.currency)
+        && data.balanceCents is int && data.balanceCents >= 0
+        && data.totalDepositsCents is int && data.totalDepositsCents >= 0
+        && data.totalWithdrawalsCents is int && data.totalWithdrawalsCents >= 0
+        && data.balanceCents == data.totalDepositsCents - data.totalWithdrawalsCents
+        && data.transactionCount is int && data.transactionCount >= 0
+        && data.status in ['active', 'frozen', 'closed']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDirectoryEntry(data) {
+      return data.keys().hasAll([
+          'accountId', 'accountNumber', 'ownerId', 'customerId', 'customerName',
+          'currency', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'accountId', 'accountNumber', 'ownerId', 'customerId', 'customerName',
+          'currency', 'status', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.accountId)
+        && isValidAccountNumber(data.accountNumber)
+        && isValidId(data.ownerId)
+        && isValidId(data.customerId)
+        && data.customerName is string && data.customerName.size() >= 2 && data.customerName.size() <= 100
+        && isValidCurrency(data.currency)
+        && data.status in ['active', 'frozen', 'closed']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidClientAccess(data) {
+      return data.keys().hasAll([
+          'accountNumber', 'accountId', 'ownerId', 'clientUid',
+          'customerName', 'email', 'emailLower', 'approvalStatus',
+          'passwordSalt', 'passwordHash', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'accountNumber', 'accountId', 'ownerId', 'clientUid',
+          'customerName', 'email', 'emailLower', 'approvalStatus',
+          'reviewedByStaffId', 'reviewedByUsername', 'reviewNote', 'reviewedAt',
+          'passwordSalt', 'passwordHash', 'createdAt', 'updatedAt'
+        ])
+        && isValidAccountNumber(data.accountNumber)
+        && isValidId(data.accountId)
+        && isValidId(data.ownerId)
+        && isValidId(data.clientUid)
+        && data.customerName is string && data.customerName.size() >= 2 && data.customerName.size() <= 100
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 120
+        && data.emailLower is string && data.emailLower.size() >= 3 && data.emailLower.size() <= 120
+        && data.emailLower == data.email.lower()
+        && data.approvalStatus in ['pending', 'approved', 'rejected']
+        && (!('reviewedByStaffId' in data) || isValidId(data.reviewedByStaffId))
+        && (!('reviewedByUsername' in data) || (data.reviewedByUsername is string && data.reviewedByUsername.size() >= 1 && data.reviewedByUsername.size() <= 60))
+        && (!('reviewNote' in data) || (data.reviewNote is string && data.reviewNote.size() <= 240))
+        && (!('reviewedAt' in data) || data.reviewedAt is timestamp)
+        && data.passwordSalt is string && data.passwordSalt.size() >= 16 && data.passwordSalt.size() <= 64
+        && data.passwordHash is string && data.passwordHash.size() >= 32 && data.passwordHash.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll([
+          'ownerId', 'accountId', 'customerId', 'accountNumber', 'customerName',
+          'type', 'amountCents', 'balanceBeforeCents', 'balanceAfterCents',
+          'currency', 'paymentMethod', 'reference', 'notes', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'clientUid', 'customerEmail', 'initiatedByUid',
+          'accountId', 'customerId', 'accountNumber', 'customerName',
+          'type', 'amountCents', 'balanceBeforeCents', 'balanceAfterCents',
+          'currency', 'paymentMethod', 'reference', 'notes',
+          'counterpartyAccountNumber', 'counterpartyName', 'transferGroupId', 'pairedTxId',
+          'staffId', 'staffUsername', 'staffRole', 'approvalRequestId',
+          'createdAt'
+        ])
+        && isValidId(data.ownerId)
+        && (!('clientUid' in data) || isValidId(data.clientUid))
+        && (!('customerEmail' in data) || (data.customerEmail is string && data.customerEmail.size() <= 120))
+        && (!('initiatedByUid' in data) || (isValidId(data.initiatedByUid) && data.initiatedByUid == request.auth.uid))
+        && isValidId(data.accountId)
+        && isValidId(data.customerId)
+        && isValidAccountNumber(data.accountNumber)
+        && data.customerName is string && data.customerName.size() >= 2 && data.customerName.size() <= 100
+        && data.type in ['deposit', 'withdrawal', 'transfer_in', 'transfer_out']
+        && data.amountCents is int && data.amountCents > 0
+        && data.balanceBeforeCents is int && data.balanceBeforeCents >= 0
+        && data.balanceAfterCents is int && data.balanceAfterCents >= 0
+        && (
+          ((data.type == 'deposit' || data.type == 'transfer_in') && data.balanceAfterCents == data.balanceBeforeCents + data.amountCents) ||
+          ((data.type == 'withdrawal' || data.type == 'transfer_out') && data.balanceAfterCents == data.balanceBeforeCents - data.amountCents)
+        )
+        && isValidCurrency(data.currency)
+        && data.paymentMethod in ['cash', 'mobile_money', 'bank_transfer', 'cheque']
+        && data.reference is string && data.reference.size() >= 3 && data.reference.size() <= 40
+        && data.notes is string && data.notes.size() <= 240
+        && (!('counterpartyAccountNumber' in data) || isValidAccountNumber(data.counterpartyAccountNumber))
+        && (!('counterpartyName' in data) || (data.counterpartyName is string && data.counterpartyName.size() >= 2 && data.counterpartyName.size() <= 100))
+        && (!('transferGroupId' in data) || isValidId(data.transferGroupId))
+        && (!('pairedTxId' in data) || isValidId(data.pairedTxId))
+        && (!('staffId' in data) || isValidId(data.staffId))
+        && (!('staffUsername' in data) || (data.staffUsername is string && data.staffUsername.size() >= 1 && data.staffUsername.size() <= 60))
+        && (!('staffRole' in data) || data.staffRole in ['admin', 'cat1'])
+        && (!('approvalRequestId' in data) || isValidId(data.approvalRequestId))
+        && data.createdAt is timestamp;
+    }
+
+    function isValidStaffUser(data) {
+      return data.keys().hasAll([
+          'ownerId', 'role', 'username', 'usernameLower', 'email', 'emailLower',
+          'passwordSalt', 'passwordHash', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'role', 'username', 'usernameLower', 'email', 'emailLower',
+          'passwordSalt', 'passwordHash', 'status', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && data.role in ['admin', 'cat1']
+        && data.username is string && data.username.size() >= 3 && data.username.size() <= 60
+        && data.usernameLower is string && data.usernameLower.size() >= 3 && data.usernameLower.size() <= 60
+        && data.usernameLower == data.username.lower()
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 120
+        && data.emailLower is string && data.emailLower.size() >= 3 && data.emailLower.size() <= 120
+        && data.emailLower == data.email.lower()
+        && data.passwordSalt is string && data.passwordSalt.size() >= 16 && data.passwordSalt.size() <= 64
+        && data.passwordHash is string && data.passwordHash.size() >= 32 && data.passwordHash.size() <= 128
+        && data.status in ['active', 'disabled']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidApprovalRequest(data) {
+      return data.keys().hasAll([
+          'ownerId', 'requestType', 'status', 'requestedByStaffId', 'requestedByUsername',
+          'requestedByEmail', 'accountId', 'accountNumber', 'customerName', 'amountCents',
+          'currency', 'paymentMethod', 'reference', 'notes', 'message', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'requestType', 'status', 'requestedByRole', 'requestedByUid',
+          'requestedByStaffId', 'requestedByUsername',
+          'requestedByEmail', 'accountId', 'accountNumber', 'customerName', 'amountCents',
+          'currency', 'paymentMethod', 'reference', 'notes', 'message',
+          'targetTransactionId', 'targetTransactionType',
+          'reviewedByStaffId', 'reviewedByUsername', 'reviewNote', 'resultTransactionId', 'reviewedAt',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && data.requestType in ['withdrawal_over_limit', 'delete_operation', 'client_account_activation', 'client_withdrawal']
+        && data.status in ['pending', 'approved', 'rejected']
+        && (!('requestedByRole' in data) || data.requestedByRole in ['admin', 'cat1', 'client'])
+        && (!('requestedByUid' in data) || isValidId(data.requestedByUid))
+        && isValidId(data.requestedByStaffId)
+        && data.requestedByUsername is string && data.requestedByUsername.size() >= 1 && data.requestedByUsername.size() <= 60
+        && data.requestedByEmail is string && data.requestedByEmail.size() >= 3 && data.requestedByEmail.size() <= 120
+        && isValidId(data.accountId)
+        && isValidAccountNumber(data.accountNumber)
+        && data.customerName is string && data.customerName.size() >= 2 && data.customerName.size() <= 100
+        && data.amountCents is int
+        && (
+          (data.requestType == 'client_account_activation' && data.amountCents == 0) ||
+          data.amountCents > 0
+        )
+        && isValidCurrency(data.currency)
+        && data.paymentMethod in ['cash', 'mobile_money', 'bank_transfer', 'cheque']
+        && data.reference is string && data.reference.size() >= 3 && data.reference.size() <= 40
+        && data.notes is string && data.notes.size() <= 240
+        && data.message is string && data.message.size() >= 1 && data.message.size() <= 280
+        && (!('targetTransactionId' in data) || isValidId(data.targetTransactionId))
+        && (!('targetTransactionType' in data) || data.targetTransactionType in ['deposit', 'withdrawal', 'transfer_in', 'transfer_out'])
+        && (!('reviewedByStaffId' in data) || isValidId(data.reviewedByStaffId))
+        && (!('reviewedByUsername' in data) || (data.reviewedByUsername is string && data.reviewedByUsername.size() >= 1 && data.reviewedByUsername.size() <= 60))
+        && (!('reviewNote' in data) || (data.reviewNote is string && data.reviewNote.size() <= 240))
+        && (!('resultTransactionId' in data) || isValidId(data.resultTransactionId))
+        && (!('reviewedAt' in data) || data.reviewedAt is timestamp)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidEmailNotification(data) {
+      return data.keys().hasAll([
+          'ownerId', 'recipientEmail', 'accountId', 'accountNumber', 'customerName',
+          'operationType', 'outcome', 'details', 'deliveryStatus', 'createdByUid',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'recipientEmail', 'accountId', 'accountNumber', 'customerName',
+          'clientUid', 'operationType', 'outcome', 'amountFormatted', 'reference',
+          'details', 'deliveryStatus', 'deliveryChannel', 'deliveryNote', 'createdByUid',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && data.recipientEmail is string && data.recipientEmail.size() >= 3 && data.recipientEmail.size() <= 120
+        && isValidId(data.accountId)
+        && isValidAccountNumber(data.accountNumber)
+        && data.customerName is string && data.customerName.size() >= 2 && data.customerName.size() <= 100
+        && (!('clientUid' in data) || isValidId(data.clientUid))
+        && data.operationType is string && data.operationType.size() >= 2 && data.operationType.size() <= 120
+        && data.outcome in ['completed', 'pending', 'validated', 'rejected']
+        && (!('amountFormatted' in data) || (data.amountFormatted is string && data.amountFormatted.size() <= 40))
+        && (!('reference' in data) || (data.reference is string && data.reference.size() <= 40))
+        && data.details is string && data.details.size() <= 320
+        && data.deliveryStatus in ['sent', 'queued_in_app', 'failed']
+        && (!('deliveryChannel' in data) || (data.deliveryChannel is string && data.deliveryChannel.size() <= 32))
+        && (!('deliveryNote' in data) || (data.deliveryNote is string && data.deliveryNote.size() <= 240))
+        && isValidId(data.createdByUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDailyCashReport(data) {
+      return data.keys().hasAll([
+          'ownerId', 'staffId', 'staffUsername', 'staffEmail', 'reportDate', 'currency',
+          'startingCashCents', 'cashWithdrawalsCents', 'cashDepositsCents',
+          'nonCashDepositsCents', 'nonCashWithdrawalsCents', 'endingCashCents',
+          'operationCount', 'notes', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'staffId', 'staffUsername', 'staffEmail', 'reportDate', 'currency',
+          'startingCashCents', 'cashWithdrawalsCents', 'cashDepositsCents',
+          'nonCashDepositsCents', 'nonCashWithdrawalsCents', 'endingCashCents',
+          'operationCount', 'notes', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && isValidId(data.staffId)
+        && data.staffUsername is string && data.staffUsername.size() >= 1 && data.staffUsername.size() <= 60
+        && data.staffEmail is string && data.staffEmail.size() >= 3 && data.staffEmail.size() <= 120
+        && data.reportDate is string && data.reportDate.size() == 10 && data.reportDate.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && isValidCurrency(data.currency)
+        && data.startingCashCents is int && data.startingCashCents >= 0
+        && data.cashWithdrawalsCents is int && data.cashWithdrawalsCents >= 0
+        && data.cashDepositsCents is int && data.cashDepositsCents >= 0
+        && data.nonCashDepositsCents is int && data.nonCashDepositsCents >= 0
+        && data.nonCashWithdrawalsCents is int && data.nonCashWithdrawalsCents >= 0
+        && data.endingCashCents is int
+        && data.endingCashCents == data.startingCashCents - data.cashWithdrawalsCents + data.cashDepositsCents
+        && data.operationCount is int && data.operationCount >= 0
+        && data.notes is string && data.notes.size() <= 240
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection Rules
+    // -------------------------------------------------------------------------
+
+    // User Profiles (PII isolated strictly to self)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'branchName', 'defaultCurrency', 'alertThresholdCents', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // Customer Directory (PII restricted to owning officer or linked verified customer)
+    match /customers/{customerId} {
+      allow get: if isValidId(customerId) && isSignedIn() && (
+        existing().ownerId == request.auth.uid || isAccountCustomer(existing())
+      );
+      allow list: if isSignedIn() && (
+        existing().ownerId == request.auth.uid || isAccountCustomer(existing())
+      );
+      allow create: if isVerifiedUser()
+        && isValidId(customerId)
+        && isValidCustomer(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(customerId)
+        && existing().ownerId == request.auth.uid
+        && isValidCustomer(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'fullName', 'phone', 'email', 'customerEmail', 'nationalId', 'occupation', 'address', 'kycStatus',
+          'profilePhotoDataUrl', 'idCardPhotoDataUrl', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedUser()
+        && isValidId(customerId)
+        && existing().ownerId == request.auth.uid;
+    }
+
+    // Microfinance Accounts (opened in Main App by Officer)
+    match /accounts/{accountId} {
+      allow get: if isValidId(accountId) && isSignedIn() && (
+        existing().ownerId == request.auth.uid || isApprovedAccountClient(existing())
+      );
+      allow list: if isSignedIn() && (
+        existing().ownerId == request.auth.uid || isApprovedAccountClient(existing())
+      );
+      allow create: if isVerifiedUser()
+        && isValidId(accountId)
+        && isValidAccount(incoming())
+        && incoming().ownerId == request.auth.uid
+        && (!('clientAccessApproved' in incoming()) || incoming().clientAccessApproved == false)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && incoming().totalWithdrawalsCents == 0
+        && (
+          (incoming().balanceCents == 0 && incoming().transactionCount == 0) ||
+          (incoming().balanceCents > 0 && incoming().transactionCount == 1)
+        )
+        && existsAfter(/databases/$(database)/documents/customers/$(incoming().customerId))
+        && getAfter(/databases/$(database)/documents/customers/$(incoming().customerId)).data.ownerId == request.auth.uid;
+
+      allow update: if isVerifiedUser()
+        && isValidId(accountId)
+        && isValidAccount(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().customerId == existing().customerId
+        && incoming().accountNumber == existing().accountNumber
+        && incoming().accountType == existing().accountType
+        && incoming().currency == existing().currency
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action 1: Ledger Operation (Officer can deposit or withdraw; Approved Client can ONLY withdraw via confirmed request or transfer_out)
+          (
+            (existing().ownerId == request.auth.uid || isApprovedAccountClient(existing()))
+            && existing().status == 'active'
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'balanceCents', 'totalDepositsCents', 'totalWithdrawalsCents', 'transactionCount', 'updatedAt'
+            ])
+            && incoming().transactionCount == existing().transactionCount + 1
+            && (
+              (
+                existing().ownerId == request.auth.uid
+                && incoming().balanceCents > existing().balanceCents
+                && incoming().totalDepositsCents == existing().totalDepositsCents + (incoming().balanceCents - existing().balanceCents)
+                && incoming().totalWithdrawalsCents == existing().totalWithdrawalsCents
+              ) || (
+                incoming().balanceCents < existing().balanceCents
+                && incoming().totalWithdrawalsCents == existing().totalWithdrawalsCents + (existing().balanceCents - incoming().balanceCents)
+                && incoming().totalDepositsCents == existing().totalDepositsCents
+              )
+            )
+          ) ||
+          // Action 2: Atomic Incoming Transfer Credit (strictly bound via getAfter to a paired transfer_in tx)
+          (
+            existing().status == 'active'
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'balanceCents', 'totalDepositsCents', 'transactionCount', 'lastTransferTxId', 'updatedAt'
+            ])
+            && 'lastTransferTxId' in incoming()
+            && isValidId(incoming().lastTransferTxId)
+            && incoming().transactionCount == existing().transactionCount + 1
+            && incoming().balanceCents > existing().balanceCents
+            && incoming().totalDepositsCents == existing().totalDepositsCents + (incoming().balanceCents - existing().balanceCents)
+            && incoming().totalWithdrawalsCents == existing().totalWithdrawalsCents
+            && existsAfter(/databases/$(database)/documents/transactions/$(incoming().lastTransferTxId))
+            && getAfter(/databases/$(database)/documents/transactions/$(incoming().lastTransferTxId)).data.type == 'transfer_in'
+            && getAfter(/databases/$(database)/documents/transactions/$(incoming().lastTransferTxId)).data.accountId == accountId
+            && getAfter(/databases/$(database)/documents/transactions/$(incoming().lastTransferTxId)).data.amountCents == (incoming().balanceCents - existing().balanceCents)
+            && getAfter(/databases/$(database)/documents/transactions/$(incoming().lastTransferTxId)).data.balanceAfterCents == incoming().balanceCents
+            && getAfter(/databases/$(database)/documents/transactions/$(incoming().lastTransferTxId)).data.createdAt == request.time
+          ) ||
+          // Action 3: Account Status Transition (officer only)
+          (
+            existing().ownerId == request.auth.uid
+            && existing().status != 'closed'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+            && (incoming().status != 'closed' || existing().balanceCents == 0)
+          ) ||
+          // Action 4: Sync Denormalized Customer Name / Email (officer only)
+          (
+            existing().ownerId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['customerName', 'customerEmail', 'updatedAt'])
+          ) ||
+          // Action 5: Admin-Validated Client Activation Link (atomically bound to approved /clientAccess/{accountNumber})
+          (
+            existing().ownerId == request.auth.uid
+            && existing().status != 'closed'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['clientUid', 'clientAccessApproved', 'customerEmail', 'updatedAt'])
+            && 'clientUid' in incoming()
+            && isValidId(incoming().clientUid)
+            && 'clientAccessApproved' in incoming()
+            && incoming().clientAccessApproved == true
+            && existsAfter(/databases/$(database)/documents/clientAccess/$(existing().accountNumber))
+            && getAfter(/databases/$(database)/documents/clientAccess/$(existing().accountNumber)).data.clientUid == incoming().clientUid
+            && getAfter(/databases/$(database)/documents/clientAccess/$(existing().accountNumber)).data.accountId == accountId
+            && getAfter(/databases/$(database)/documents/clientAccess/$(existing().accountNumber)).data.approvalStatus == 'approved'
+          ) ||
+          // Action 6: Atomic Validated Operation Deletion Reversal (Branch Owner / Admin only)
+          (
+            existing().ownerId == request.auth.uid
+            && existing().status == 'active'
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'balanceCents', 'totalDepositsCents', 'totalWithdrawalsCents', 'transactionCount', 'lastDeletedTxId', 'updatedAt'
+            ])
+            && 'lastDeletedTxId' in incoming()
+            && isValidId(incoming().lastDeletedTxId)
+            && incoming().transactionCount == existing().transactionCount - 1
+            && exists(/databases/$(database)/documents/transactions/$(incoming().lastDeletedTxId))
+            && !existsAfter(/databases/$(database)/documents/transactions/$(incoming().lastDeletedTxId))
+            && get(/databases/$(database)/documents/transactions/$(incoming().lastDeletedTxId)).data.accountId == accountId
+            && get(/databases/$(database)/documents/transactions/$(incoming().lastDeletedTxId)).data.ownerId == request.auth.uid
+            && (
+              (
+                get(/databases/$(database)/documents/transactions/$(incoming().lastDeletedTxId)).data.type == 'deposit'
+                && incoming().balanceCents == existing().balanceCents - get(/databases/$(database)/documents/transactions/$(incoming().lastDeletedTxId)).data.amountCents
+                && incoming().totalDepositsCents == existing().totalDepositsCents - get(/databases/$(database)/documents/transactions/$(incoming().lastDeletedTxId)).data.amountCents
+                && incoming().totalWithdrawalsCents == existing().totalWithdrawalsCents
+              ) || (
+                get(/databases/$(database)/documents/transactions/$(incoming().lastDeletedTxId)).data.type == 'withdrawal'
+                && incoming().balanceCents == existing().balanceCents + get(/databases/$(database)/documents/transactions/$(incoming().lastDeletedTxId)).data.amountCents
+                && incoming().totalWithdrawalsCents == existing().totalWithdrawalsCents - get(/databases/$(database)/documents/transactions/$(incoming().lastDeletedTxId)).data.amountCents
+                && incoming().totalDepositsCents == existing().totalDepositsCents
+              )
+            )
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // Account Number Routing Directory (exact lookup only, no listing, no PII)
+    match /accountDirectory/{accountNumber} {
+      allow get: if isSignedIn() && isValidAccountNumber(accountNumber);
+      allow list: if false;
+      allow create: if isVerifiedUser()
+        && isValidAccountNumber(accountNumber)
+        && isValidDirectoryEntry(incoming())
+        && incoming().accountNumber == accountNumber
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidAccountNumber(accountNumber)
+        && existing().ownerId == request.auth.uid
+        && isValidDirectoryEntry(incoming())
+        && incoming().accountNumber == existing().accountNumber
+        && incoming().accountId == existing().accountId
+        && incoming().ownerId == existing().ownerId
+        && incoming().customerId == existing().customerId
+        && incoming().currency == existing().currency
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['customerName', 'status', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // Client App Password Credentials (Admin validation required before account access)
+    match /clientAccess/{accountNumber} {
+      allow get: if isValidAccountNumber(accountNumber) && isSignedIn() && (
+        resource == null ||
+        existing().clientUid == request.auth.uid ||
+        existing().ownerId == request.auth.uid
+      );
+      allow list: if false;
+      allow create: if isVerifiedUser()
+        && isValidAccountNumber(accountNumber)
+        && isValidClientAccess(incoming())
+        && incoming().accountNumber == accountNumber
+        && incoming().clientUid == request.auth.uid
+        && incoming().approvalStatus == 'pending'
+        && !('reviewedByStaffId' in incoming())
+        && !('reviewedByUsername' in incoming())
+        && !('reviewNote' in incoming())
+        && !('reviewedAt' in incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/accountDirectory/$(accountNumber))
+        && get(/databases/$(database)/documents/accountDirectory/$(accountNumber)).data.accountId == incoming().accountId
+        && get(/databases/$(database)/documents/accountDirectory/$(accountNumber)).data.ownerId == incoming().ownerId
+        && get(/databases/$(database)/documents/accountDirectory/$(accountNumber)).data.status != 'closed';
+      allow update: if isVerifiedUser()
+        && isValidAccountNumber(accountNumber)
+        && isValidClientAccess(incoming())
+        && incoming().accountNumber == existing().accountNumber
+        && incoming().accountId == existing().accountId
+        && incoming().ownerId == existing().ownerId
+        && incoming().clientUid == existing().clientUid
+        && incoming().customerName == existing().customerName
+        && incoming().email == existing().email
+        && incoming().emailLower == existing().emailLower
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (
+            existing().clientUid == request.auth.uid
+            && existing().approvalStatus == 'approved'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['passwordSalt', 'passwordHash', 'updatedAt'])
+          ) || (
+            existing().ownerId == request.auth.uid
+            && existing().approvalStatus == 'pending'
+            && incoming().approvalStatus in ['approved', 'rejected']
+            && 'reviewedByStaffId' in incoming()
+            && incoming().reviewedByStaffId == 'admin_' + request.auth.uid
+            && 'reviewedAt' in incoming()
+            && incoming().reviewedAt == request.time
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'approvalStatus', 'reviewedByStaffId', 'reviewedByUsername', 'reviewNote', 'reviewedAt', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isVerifiedUser()
+        && isValidAccountNumber(accountNumber)
+        && existing().ownerId == request.auth.uid;
+    }
+
+    // Branch Staff Accounts (Strictly 1 Admin at 'admin_' + ownerId, unlimited User Cat 1 tellers)
+    match /staffUsers/{staffId} {
+      allow get: if isValidId(staffId) && isSignedIn() && (
+        (resource == null && staffId == 'admin_' + request.auth.uid) ||
+        (resource != null && existing().ownerId == request.auth.uid)
+      );
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(staffId)
+        && isValidStaffUser(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (
+            incoming().role == 'admin'
+            && staffId == 'admin_' + request.auth.uid
+            && incoming().status == 'active'
+          ) || (
+            incoming().role == 'cat1'
+            && staffId != 'admin_' + request.auth.uid
+          )
+        );
+      allow update: if isVerifiedUser()
+        && isValidId(staffId)
+        && existing().ownerId == request.auth.uid
+        && isValidStaffUser(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().role == existing().role
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'username', 'usernameLower', 'email', 'emailLower', 'passwordSalt', 'passwordHash', 'status', 'updatedAt'
+        ])
+        && (existing().role != 'admin' || incoming().status == 'active');
+      allow delete: if isVerifiedUser()
+        && isValidId(staffId)
+        && existing().ownerId == request.auth.uid
+        && existing().role == 'cat1';
+    }
+
+    // Approval Requests (Cat 1 -> Admin, Client Activation -> Admin, Client Withdrawal -> Admin/Cat 1)
+    match /approvalRequests/{requestId} {
+      allow get: if isValidId(requestId) && isSignedIn() && (
+        existing().ownerId == request.auth.uid ||
+        ('requestedByUid' in existing() && existing().requestedByUid == request.auth.uid)
+      );
+      allow list: if isSignedIn() && (
+        existing().ownerId == request.auth.uid ||
+        ('requestedByUid' in existing() && existing().requestedByUid == request.auth.uid)
+      );
+      allow create: if isVerifiedUser()
+        && isValidId(requestId)
+        && isValidApprovalRequest(incoming())
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && !('reviewedByStaffId' in incoming())
+        && !('reviewedByUsername' in incoming())
+        && !('reviewNote' in incoming())
+        && !('resultTransactionId' in incoming())
+        && !('reviewedAt' in incoming())
+        && (
+          (
+            incoming().ownerId == request.auth.uid
+            && incoming().requestType in ['withdrawal_over_limit', 'delete_operation']
+          ) || (
+            incoming().requestType == 'client_account_activation'
+            && 'requestedByUid' in incoming()
+            && incoming().requestedByUid == request.auth.uid
+            && 'requestedByRole' in incoming()
+            && incoming().requestedByRole == 'client'
+            && existsAfter(/databases/$(database)/documents/clientAccess/$(incoming().accountNumber))
+            && getAfter(/databases/$(database)/documents/clientAccess/$(incoming().accountNumber)).data.clientUid == request.auth.uid
+            && getAfter(/databases/$(database)/documents/clientAccess/$(incoming().accountNumber)).data.accountId == incoming().accountId
+            && getAfter(/databases/$(database)/documents/clientAccess/$(incoming().accountNumber)).data.ownerId == incoming().ownerId
+            && getAfter(/databases/$(database)/documents/clientAccess/$(incoming().accountNumber)).data.approvalStatus == 'pending'
+          ) || (
+            incoming().requestType == 'client_withdrawal'
+            && 'requestedByUid' in incoming()
+            && incoming().requestedByUid == request.auth.uid
+            && 'requestedByRole' in incoming()
+            && incoming().requestedByRole == 'client'
+            && exists(/databases/$(database)/documents/accounts/$(incoming().accountId))
+            && isApprovedAccountClient(get(/databases/$(database)/documents/accounts/$(incoming().accountId)).data)
+            && get(/databases/$(database)/documents/accounts/$(incoming().accountId)).data.status == 'active'
+            && get(/databases/$(database)/documents/accounts/$(incoming().accountId)).data.ownerId == incoming().ownerId
+            && get(/databases/$(database)/documents/accounts/$(incoming().accountId)).data.balanceCents >= incoming().amountCents
+          )
+        );
+      allow update: if isVerifiedUser()
+        && isValidId(requestId)
+        && existing().ownerId == request.auth.uid
+        && existing().status == 'pending'
+        && isValidApprovalRequest(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().requestType == existing().requestType
+        && incoming().requestedByStaffId == existing().requestedByStaffId
+        && (!('requestedByUid' in existing()) || incoming().requestedByUid == existing().requestedByUid)
+        && incoming().accountId == existing().accountId
+        && incoming().amountCents == existing().amountCents
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().status in ['approved', 'rejected']
+        && 'reviewedByStaffId' in incoming()
+        && (
+          incoming().reviewedByStaffId == 'admin_' + request.auth.uid ||
+          (
+            existing().requestType == 'client_withdrawal'
+            && exists(/databases/$(database)/documents/staffUsers/$(incoming().reviewedByStaffId))
+            && get(/databases/$(database)/documents/staffUsers/$(incoming().reviewedByStaffId)).data.ownerId == request.auth.uid
+            && get(/databases/$(database)/documents/staffUsers/$(incoming().reviewedByStaffId)).data.status == 'active'
+          )
+        )
+        && 'reviewedAt' in incoming()
+        && incoming().reviewedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'reviewedByStaffId', 'reviewedByUsername', 'reviewNote', 'resultTransactionId', 'reviewedAt', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    // Daily Cash Reports (Starting Cash - Cash Withdrawals + Deposits)
+    match /dailyReports/{reportId} {
+      allow get: if isValidId(reportId) && isSignedIn() && (
+        resource == null || existing().ownerId == request.auth.uid
+      );
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(reportId)
+        && isValidDailyCashReport(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(reportId)
+        && existing().ownerId == request.auth.uid
+        && isValidDailyCashReport(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().staffId == existing().staffId
+        && incoming().reportDate == existing().reportDate
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // Audit Transaction Ledger (Atomic Account Link + Staff $350 Cap + Admin Reversal Delete)
+    match /transactions/{transactionId} {
+      allow get: if isValidId(transactionId) && isSignedIn() && (
+        existing().ownerId == request.auth.uid || isAccountCustomer(existing())
+      );
+      allow list: if isSignedIn() && (
+        existing().ownerId == request.auth.uid || isAccountCustomer(existing())
+      );
+      allow create: if isVerifiedUser()
+        && isValidId(transactionId)
+        && isValidTransaction(incoming())
+        && incoming().createdAt == request.time
+        && existsAfter(/databases/$(database)/documents/accounts/$(incoming().accountId))
+        && getAfter(/databases/$(database)/documents/accounts/$(incoming().accountId)).data.ownerId == incoming().ownerId
+        && getAfter(/databases/$(database)/documents/accounts/$(incoming().accountId)).data.customerId == incoming().customerId
+        && getAfter(/databases/$(database)/documents/accounts/$(incoming().accountId)).data.accountNumber == incoming().accountNumber
+        && getAfter(/databases/$(database)/documents/accounts/$(incoming().accountId)).data.currency == incoming().currency
+        && getAfter(/databases/$(database)/documents/accounts/$(incoming().accountId)).data.status == 'active'
+        && getAfter(/databases/$(database)/documents/accounts/$(incoming().accountId)).data.balanceCents == incoming().balanceAfterCents
+        && getAfter(/databases/$(database)/documents/accounts/$(incoming().accountId)).data.updatedAt == request.time
+        && (
+          // Deposits: strictly restricted to Main App Officer (clients cannot add money)
+          (
+            incoming().type == 'deposit'
+            && incoming().ownerId == request.auth.uid
+          ) ||
+          // Withdrawal / Transfer Out: Withdrawals require Officer/Staff confirmation (Cat 1 capped at $350 unless backed by approved request);
+          // Transfer Out allowed for Officer OR Admin-approved Client.
+          (
+            incoming().type in ['withdrawal', 'transfer_out']
+            && (
+              (
+                incoming().type == 'withdrawal'
+                && incoming().ownerId == request.auth.uid
+              ) || (
+                incoming().type == 'transfer_out'
+                && (
+                  incoming().ownerId == request.auth.uid ||
+                  isApprovedAccountClient(getAfter(/databases/$(database)/documents/accounts/$(incoming().accountId)).data)
+                )
+              )
+            )
+            && (
+              incoming().type != 'transfer_out' ||
+              ('initiatedByUid' in incoming() && incoming().initiatedByUid == request.auth.uid)
+            )
+            && (
+              incoming().type != 'withdrawal' ||
+              !('staffRole' in incoming()) ||
+              incoming().staffRole == 'admin' ||
+              (incoming().amountCents >= 100 && incoming().amountCents <= 35000 && !('approvalRequestId' in incoming())) ||
+              (
+                'approvalRequestId' in incoming()
+                && isValidId(incoming().approvalRequestId)
+                && existsAfter(/databases/$(database)/documents/approvalRequests/$(incoming().approvalRequestId))
+                && getAfter(/databases/$(database)/documents/approvalRequests/$(incoming().approvalRequestId)).data.status == 'approved'
+                && getAfter(/databases/$(database)/documents/approvalRequests/$(incoming().approvalRequestId)).data.ownerId == request.auth.uid
+                && getAfter(/databases/$(database)/documents/approvalRequests/$(incoming().approvalRequestId)).data.requestType in ['withdrawal_over_limit', 'client_withdrawal']
+                && getAfter(/databases/$(database)/documents/approvalRequests/$(incoming().approvalRequestId)).data.accountId == incoming().accountId
+                && getAfter(/databases/$(database)/documents/approvalRequests/$(incoming().approvalRequestId)).data.amountCents == incoming().amountCents
+              )
+            )
+          ) ||
+          // Transfer In: requires a paired outgoing transfer_out tx in the same atomic transaction
+          (
+            incoming().type == 'transfer_in'
+            && 'pairedTxId' in incoming()
+            && isValidId(incoming().pairedTxId)
+            && 'initiatedByUid' in incoming()
+            && incoming().initiatedByUid == request.auth.uid
+            && getAfter(/databases/$(database)/documents/accounts/$(incoming().accountId)).data.lastTransferTxId == transactionId
+            && existsAfter(/databases/$(database)/documents/transactions/$(incoming().pairedTxId))
+            && getAfter(/databases/$(database)/documents/transactions/$(incoming().pairedTxId)).data.type == 'transfer_out'
+            && getAfter(/databases/$(database)/documents/transactions/$(incoming().pairedTxId)).data.initiatedByUid == request.auth.uid
+            && getAfter(/databases/$(database)/documents/transactions/$(incoming().pairedTxId)).data.accountId != incoming().accountId
+            && getAfter(/databases/$(database)/documents/transactions/$(incoming().pairedTxId)).data.amountCents == incoming().amountCents
+            && getAfter(/databases/$(database)/documents/transactions/$(incoming().pairedTxId)).data.currency == incoming().currency
+            && getAfter(/databases/$(database)/documents/transactions/$(incoming().pairedTxId)).data.counterpartyAccountNumber == incoming().accountNumber
+            && getAfter(/databases/$(database)/documents/transactions/$(incoming().pairedTxId)).data.createdAt == request.time
+          )
+        );
+      allow update: if false;
+      // Only Branch Owner (Admin) can delete a validated deposit/withdrawal atomically paired with Account Action 6 reversal
+      allow delete: if isVerifiedUser()
+        && isValidId(transactionId)
+        && existing().ownerId == request.auth.uid
+        && existing().type in ['deposit', 'withdrawal']
+        && existsAfter(/databases/$(database)/documents/accounts/$(existing().accountId))
+        && getAfter(/databases/$(database)/documents/accounts/$(existing().accountId)).data.lastDeletedTxId == transactionId
+        && getAfter(/databases/$(database)/documents/accounts/$(existing().accountId)).data.updatedAt == request.time;
+    }
+
+    // Customer Email Notifications & Audit Receipts
+    match /emailNotifications/{notificationId} {
+      allow get: if isValidId(notificationId) && isSignedIn() && (
+        existing().ownerId == request.auth.uid ||
+        ('clientUid' in existing() && existing().clientUid == request.auth.uid) ||
+        (request.auth.token.email is string && existing().recipientEmail == request.auth.token.email.lower())
+      );
+      allow list: if isSignedIn() && (
+        existing().ownerId == request.auth.uid ||
+        ('clientUid' in existing() && existing().clientUid == request.auth.uid) ||
+        (request.auth.token.email is string && existing().recipientEmail == request.auth.token.email.lower())
+      );
+      allow create: if isVerifiedUser()
+        && isValidId(notificationId)
+        && isValidEmailNotification(incoming())
+        && incoming().createdByUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          incoming().ownerId == request.auth.uid ||
+          ('clientUid' in incoming() && incoming().clientUid == request.auth.uid)
+        );
+      allow update: if isVerifiedUser()
+        && isValidId(notificationId)
+        && existing().createdByUid == request.auth.uid
+        && isValidEmailNotification(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().recipientEmail == existing().recipientEmail
+        && incoming().accountId == existing().accountId
+        && incoming().accountNumber == existing().accountNumber
+        && incoming().operationType == existing().operationType
+        && incoming().outcome == existing().outcome
+        && incoming().createdByUid == existing().createdByUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'deliveryStatus', 'deliveryChannel', 'deliveryNote', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+  }
+}

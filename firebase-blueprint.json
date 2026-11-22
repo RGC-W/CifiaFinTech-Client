@@ -1,0 +1,1011 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile and branch/portal preferences.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "branchName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "defaultCurrency": {
+          "type": "string",
+          "enum": ["USD", "KES", "NGN", "GHS", "EUR", "GBP"]
+        },
+        "alertThresholdCents": {
+          "type": "integer",
+          "description": "Single-transaction amount threshold in cents (0 disables dashboard warnings)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "email",
+        "branchName",
+        "defaultCurrency",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Microfinance customer KYC profile managed by an authenticated branch officer.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "customerEmail": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "phone": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 30
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "nationalId": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 40
+        },
+        "occupation": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "address": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "kycStatus": {
+          "type": "string",
+          "enum": ["verified", "pending"]
+        },
+        "profilePhotoDataUrl": {
+          "type": "string",
+          "maxLength": 220000,
+          "pattern": "^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$"
+        },
+        "idCardPhotoDataUrl": {
+          "type": "string",
+          "maxLength": 380000,
+          "pattern": "^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "fullName",
+        "phone",
+        "email",
+        "nationalId",
+        "occupation",
+        "address",
+        "kycStatus",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Account": {
+      "title": "Account",
+      "description": "Microfinance customer deposit/savings account opened in the main app with authoritative cent-denominated balance.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientAccessApproved": {
+          "type": "boolean"
+        },
+        "customerEmail": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "customerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "customerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "accountNumber": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 24,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "accountType": {
+          "type": "string",
+          "enum": ["savings", "business", "group_solidarity", "fixed_deposit"]
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["USD", "KES", "NGN", "GHS", "EUR", "GBP"]
+        },
+        "balanceCents": {
+          "type": "integer"
+        },
+        "totalDepositsCents": {
+          "type": "integer"
+        },
+        "totalWithdrawalsCents": {
+          "type": "integer"
+        },
+        "transactionCount": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "frozen", "closed"]
+        },
+        "lastTransferTxId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "lastDeletedTxId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "customerId",
+        "customerName",
+        "accountNumber",
+        "accountType",
+        "currency",
+        "balanceCents",
+        "totalDepositsCents",
+        "totalWithdrawalsCents",
+        "transactionCount",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AccountDirectoryEntry": {
+      "title": "AccountDirectoryEntry",
+      "description": "Non-PII transfer and enrollment routing entry keyed by accountNumber allowing exact-match lookup without exposing customer PII or balances.",
+      "type": "object",
+      "properties": {
+        "accountId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "accountNumber": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 24,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "customerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "customerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["USD", "KES", "NGN", "GHS", "EUR", "GBP"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "frozen", "closed"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "accountId",
+        "accountNumber",
+        "ownerId",
+        "customerId",
+        "customerName",
+        "currency",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ClientAccess": {
+      "title": "ClientAccess",
+      "description": "Client app login credential linking a Main App account number to customer email, salted PBKDF2 password hash, and Admin validation state.",
+      "type": "object",
+      "properties": {
+        "accountNumber": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 24,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "accountId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "customerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "emailLower": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "approvalStatus": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"]
+        },
+        "reviewedByStaffId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "reviewedByUsername": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "reviewNote": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "reviewedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "passwordSalt": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 64
+        },
+        "passwordHash": {
+          "type": "string",
+          "minLength": 32,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "accountNumber",
+        "accountId",
+        "ownerId",
+        "clientUid",
+        "customerName",
+        "email",
+        "emailLower",
+        "approvalStatus",
+        "passwordSalt",
+        "passwordHash",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Immutable deposit, withdrawal, or transfer ledger entry bound atomically to an account balance update.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "customerEmail": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "initiatedByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "accountId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "customerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "accountNumber": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 24,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "customerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "type": {
+          "type": "string",
+          "enum": ["deposit", "withdrawal", "transfer_in", "transfer_out"]
+        },
+        "amountCents": {
+          "type": "integer"
+        },
+        "balanceBeforeCents": {
+          "type": "integer"
+        },
+        "balanceAfterCents": {
+          "type": "integer"
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["USD", "KES", "NGN", "GHS", "EUR", "GBP"]
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["cash", "mobile_money", "bank_transfer", "cheque"]
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 40
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "counterpartyAccountNumber": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 24,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "counterpartyName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "transferGroupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "pairedTxId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "staffId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "staffUsername": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "staffRole": {
+          "type": "string",
+          "enum": ["admin", "cat1"]
+        },
+        "approvalRequestId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "accountId",
+        "customerId",
+        "accountNumber",
+        "customerName",
+        "type",
+        "amountCents",
+        "balanceBeforeCents",
+        "balanceAfterCents",
+        "currency",
+        "paymentMethod",
+        "reference",
+        "notes",
+        "createdAt"
+      ]
+    },
+    "StaffUser": {
+      "title": "StaffUser",
+      "description": "Branch staff operator account: strictly one Admin ('admin_' + ownerId) and up to 1000+ User Cat 1 tellers with email, username, and salted PBKDF2 password hash.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "cat1"]
+        },
+        "username": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 60
+        },
+        "usernameLower": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 60
+        },
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "emailLower": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "passwordSalt": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 64
+        },
+        "passwordHash": {
+          "type": "string",
+          "minLength": 32,
+          "maxLength": 128
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "disabled"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "role",
+        "username",
+        "usernameLower",
+        "email",
+        "emailLower",
+        "passwordSalt",
+        "passwordHash",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ApprovalRequest": {
+      "title": "ApprovalRequest",
+      "description": "Validation request message sent from User Cat 1 to Admin for withdrawals over $350 or deleting a validated operation.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "requestType": {
+          "type": "string",
+          "enum": ["withdrawal_over_limit", "delete_operation", "client_account_activation", "client_withdrawal"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"]
+        },
+        "requestedByRole": {
+          "type": "string",
+          "enum": ["admin", "cat1", "client"]
+        },
+        "requestedByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "requestedByStaffId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "requestedByUsername": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "requestedByEmail": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "accountId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "accountNumber": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 24,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "customerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "amountCents": {
+          "type": "integer"
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["USD", "KES", "NGN", "GHS", "EUR", "GBP"]
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["cash", "mobile_money", "bank_transfer", "cheque"]
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 40
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280
+        },
+        "targetTransactionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "targetTransactionType": {
+          "type": "string",
+          "enum": ["deposit", "withdrawal", "transfer_in", "transfer_out"]
+        },
+        "reviewedByStaffId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "reviewedByUsername": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "reviewNote": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "resultTransactionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "reviewedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "requestType",
+        "status",
+        "requestedByStaffId",
+        "requestedByUsername",
+        "requestedByEmail",
+        "accountId",
+        "accountNumber",
+        "customerName",
+        "amountCents",
+        "currency",
+        "paymentMethod",
+        "reference",
+        "notes",
+        "message",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "DailyCashReport": {
+      "title": "DailyCashReport",
+      "description": "Daily teller cash reconciliation report recording starting cash minus cash withdrawals plus deposits.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "staffId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "staffUsername": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "staffEmail": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "reportDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["USD", "KES", "NGN", "GHS", "EUR", "GBP"]
+        },
+        "startingCashCents": {
+          "type": "integer"
+        },
+        "cashWithdrawalsCents": {
+          "type": "integer"
+        },
+        "cashDepositsCents": {
+          "type": "integer"
+        },
+        "nonCashDepositsCents": {
+          "type": "integer"
+        },
+        "nonCashWithdrawalsCents": {
+          "type": "integer"
+        },
+        "endingCashCents": {
+          "type": "integer"
+        },
+        "operationCount": {
+          "type": "integer"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "staffId",
+        "staffUsername",
+        "staffEmail",
+        "reportDate",
+        "currency",
+        "startingCashCents",
+        "cashWithdrawalsCents",
+        "cashDepositsCents",
+        "nonCashDepositsCents",
+        "nonCashWithdrawalsCents",
+        "endingCashCents",
+        "operationCount",
+        "notes",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "EmailNotification": {
+      "title": "EmailNotification",
+      "description": "Audit log and email dispatch receipt sent to customers when an operation is completed, validated, or rejected.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "recipientEmail": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "accountId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "accountNumber": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 24,
+          "pattern": "^[A-Z0-9\\-]+$"
+        },
+        "customerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "clientUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "operationType": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "outcome": {
+          "type": "string",
+          "enum": ["completed", "pending", "validated", "rejected"]
+        },
+        "amountFormatted": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "reference": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "details": {
+          "type": "string",
+          "maxLength": 320
+        },
+        "deliveryStatus": {
+          "type": "string",
+          "enum": ["sent", "queued_in_app", "failed"]
+        },
+        "deliveryChannel": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "deliveryNote": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "createdByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "ownerId",
+        "recipientEmail",
+        "accountId",
+        "accountNumber",
+        "customerName",
+        "operationType",
+        "outcome",
+        "details",
+        "deliveryStatus",
+        "createdByUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profile containing PII and branch/portal preferences."
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/Customer" },
+      "description": "Customer KYC directory records accessible to the managing officer or linked verified customer."
+    },
+    "/accounts/{accountId}": {
+      "schema": { "$ref": "#/entities/Account" },
+      "description": "Microfinance savings/business/solidarity accounts opened in the main app."
+    },
+    "/accountDirectory/{accountNumber}": {
+      "schema": { "$ref": "#/entities/AccountDirectoryEntry" },
+      "description": "Non-PII exact-match lookup entries for account enrollment and transfers."
+    },
+    "/clientAccess/{accountNumber}": {
+      "schema": { "$ref": "#/entities/ClientAccess" },
+      "description": "Salted PBKDF2 password credentials for customer self-service login by Main App account ID."
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Deposit, withdrawal, and transfer ledger entries for customer accounts."
+    },
+    "/staffUsers/{staffId}": {
+      "schema": { "$ref": "#/entities/StaffUser" },
+      "description": "Branch staff accounts (strictly 1 Admin + unlimited User Cat 1 tellers)."
+    },
+    "/approvalRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/ApprovalRequest" },
+      "description": "Validation request messages for over-$350 withdrawals, operation deletions, client access activation, and client withdrawal confirmations."
+    },
+    "/dailyReports/{reportId}": {
+      "schema": { "$ref": "#/entities/DailyCashReport" },
+      "description": "Daily teller cash reconciliation reports (starting cash minus cash withdrawals plus deposits)."
+    },
+    "/emailNotifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/EmailNotification" },
+      "description": "Customer email notifications and dispatch statuses for account operations."
+    }
+  }
+}

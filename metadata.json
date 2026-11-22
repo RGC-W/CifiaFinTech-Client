@@ -1,0 +1,6 @@
+{
+  "name": "Cairn Microfinance",
+  "description": "Customer account management, deposit and withdrawal ledger operations, and real-time balance calculation for microfinance institutions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
